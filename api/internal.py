@@ -64,6 +64,8 @@ async def build_runtime(org_id: uuid.UUID) -> dict[str, Any] | None:
         "name": profile.business_name,
         "timezone": org.timezone,
         "greeting": profile.greeting,
+        "language": profile.language,
+        "voice": profile.voice,
         "about": profile.about,
         "location_type": profile.location_type,
         "address": ", ".join(p for p in (profile.address, profile.city, profile.country) if p) or None,

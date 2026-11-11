@@ -55,6 +55,10 @@ class PublicBusiness(BaseModel):
     hours: list[PublicHours]
     faqs: list[Faq]
     calls_enabled: bool
+    logo_url: str | None
+    widget_label: str
+    widget_color: str
+    widget_position: str
 
 
 async def _org_by_slug(slug: str) -> Organization:
@@ -88,6 +92,8 @@ async def public_business(slug: str) -> PublicBusiness:
         products=[item(s) for s in items if s.kind == "product"],
         hours=[PublicHours(weekday=h.weekday, opens=h.opens, closes=h.closes) for h in hours],
         faqs=[Faq(**f) for f in profile.faqs], calls_enabled=profile.public_calls_enabled,
+        logo_url=profile.logo_url, widget_label=profile.widget_label, widget_color=profile.widget_color,
+        widget_position=profile.widget_position,
     )
 
 

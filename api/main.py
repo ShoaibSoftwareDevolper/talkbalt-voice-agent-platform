@@ -21,6 +21,7 @@ from api.history import router as history_router  # noqa: E402
 from api.internal import router as internal_router  # noqa: E402
 from api.org import router as org_router  # noqa: E402
 from api.public import router as public_router  # noqa: E402
+from api.widget import router as widget_router  # noqa: E402
 
 CORS_ORIGINS = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "http://localhost:3001").split(",") if o.strip()
@@ -34,7 +35,7 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PUT", "DELETE"],
     allow_headers=["Content-Type"],
 )
-for router in (auth_router, org_router, public_router, history_router, analytics_router, internal_router):
+for router in (auth_router, org_router, widget_router, public_router, history_router, analytics_router, internal_router):
     app.include_router(router)
 
 

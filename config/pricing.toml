@@ -9,6 +9,11 @@
 #   Deepgram:  https://deepgram.com/pricing
 #   LiveKit:   https://livekit.com/pricing
 
+# --- Models the voice agent uses now (keys into the [stt] and [tts] tables below) ---------------
+[active]
+stt = "nova-3-multi"          # Deepgram Nova-3 with language="multi" (English, Hindi, spoken Urdu)
+tts = "cartesia/sonic-3.6"    # Cartesia Sonic 3.6 through LiveKit Inference (English, Urdu, Hindi)
+
 # --- LLM (Groq), per 1 million tokens (source: groq.com/pricing, 2026-10) ----------------------
 # Cached input tokens are billed at a discount; reasoning tokens are part of output.
 [llm."openai/gpt-oss-20b"]
@@ -26,9 +31,19 @@ output_per_million = 0.60
 [stt."nova-3"]
 per_minute = 0.0048
 
+# Multilingual (language="multi") is billed at a higher rate (source: deepgram.com/pricing and
+# LiveKit's Inference price list, 2026-11).
+[stt."nova-3-multi"]
+per_minute = 0.0058
+
 # --- Text-to-speech (Deepgram Aura-2), per 1,000 characters (source: deepgram.com/pricing, 2026-10)
 [tts."aura-2"]
 per_1k_characters = 0.030
+
+# --- Text-to-speech through LiveKit Inference, per 1,000 characters (source: LiveKit's Inference
+# price list, 2026-11: $50 per 1M characters on Build and Ship, $37.50 on Scale) -----------------
+[tts."cartesia/sonic-3.6"]
+per_1k_characters = 0.050
 
 # --- LiveKit (source: livekit.com/pricing, 2026-10) ----------------------------------------------
 [livekit]

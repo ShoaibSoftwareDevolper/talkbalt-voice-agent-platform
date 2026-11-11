@@ -25,6 +25,13 @@ def price(*path: str) -> float | None:
     return float(node) if isinstance(node, (int, float)) and not isinstance(node, bool) else None
 
 
+def active_model(kind: str) -> str:
+    """The STT or TTS model the agent uses now ([active] in pricing.toml)."""
+    defaults = {"stt": "nova-3", "tts": "aura-2"}
+    value = load_pricing().get("active", {}).get(kind)
+    return value if isinstance(value, str) else defaults[kind]
+
+
 def free_tier(key: str) -> float | None:
     return price("free_tier", key)
 
@@ -59,8 +66,8 @@ def estimate_call_cost(
     add("llm_input", price("llm", model, "input_per_million"), uncached / 1e6)
     add("llm_cached_input", price("llm", model, "cached_input_per_million"), cached_tokens / 1e6)
     add("llm_output", price("llm", model, "output_per_million"), completion_tokens / 1e6)
-    add("stt", price("stt", "nova-3", "per_minute"), stt_audio_seconds / 60)
-    add("tts", price("tts", "aura-2", "per_1k_characters"), tts_characters / 1000)
+    add("stt", price("stt", active_model("stt"), "per_minute"), stt_audio_seconds / 60)
+    add("tts", price("tts", active_model("tts"), "per_1k_characters"), tts_characters / 1000)
     minutes = math.ceil(duration_seconds / 60) if duration_seconds else 0
     if call_type == "phone":
         add("phone_inbound", price("livekit", "inbound_phone_per_minute"), minutes)

@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.auth import CurrentMember, PlatformAdmin
 from api.history import get_db, get_member_call
 from db import CallEvent, CallTurnMetric, Organization
-from pricing import free_tier, price
+from pricing import active_model, free_tier, price
 
 router = APIRouter(prefix="/api", tags=["analytics"])
 Db = Annotated[AsyncSession, Depends(get_db)]
@@ -212,7 +212,11 @@ async def usage(db: Db, admin: PlatformAdmin) -> dict[str, Any]:
 
     stt_minutes = float(row["stt_seconds"]) / 60
     tts_chars = int(row["tts_characters"])
-    stt_price, tts_price = price("stt", "nova-3", "per_minute"), price("tts", "aura-2", "per_1k_characters")
+    # Deepgram bills the STT; the TTS counts here only when it is Deepgram's too (Aura).
+    tts_model = active_model("tts")
+    tts_on_deepgram = tts_model.startswith("aura")
+    stt_price = price("stt", active_model("stt"), "per_minute")
+    tts_price = price("tts", tts_model, "per_1k_characters") if tts_on_deepgram else 0.0
     deepgram_used = None
     if stt_price is not None and tts_price is not None:
         deepgram_used = round(stt_minutes * stt_price + tts_chars / 1000 * tts_price, 4)
@@ -226,7 +230,8 @@ async def usage(db: Db, admin: PlatformAdmin) -> dict[str, Any]:
         "meters": [
             meter(
                 "deepgram_credit", "Deepgram credit used", deepgram_used, free_tier("deepgram_credit_usd"), "USD",
-                f"Estimated from {stt_minutes:.1f} STT minutes and {tts_chars} TTS characters this month"
+                f"Estimated from {stt_minutes:.1f} STT minutes"
+                + (f" and {tts_chars} TTS characters" if tts_on_deepgram else "") + " this month"
                 + ("" if deepgram_used is not None else "; set Deepgram prices in config/pricing.toml to estimate USD"),
             ),
             meter("livekit_inbound", "LiveKit inbound phone minutes", float(row["phone_minutes"]), free_tier("livekit_inbound_minutes"),

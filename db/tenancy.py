@@ -93,6 +93,15 @@ class AgentProfile(Base):
     website: Mapped[str | None] = mapped_column(String(300))
     # Common questions and the answers the agent should give: [{"q": ..., "a": ...}].
     faqs: Mapped[list[dict[str, str]]] = mapped_column(JSONB, default=list, server_default=text("'[]'::jsonb"))
+    # The language the receptionist speaks (en | ur | hi) and its voice (a key in the agent's voice
+    # catalog, agent/voices.py). Callers are understood in all three languages either way.
+    language: Mapped[str] = mapped_column(String(2), default="en", server_default="en")
+    voice: Mapped[str] = mapped_column(String(32), default="kiara", server_default="kiara")
+    # The website widget's button and the business's logo (Cloudinary, talkbalt/<slug>/logo).
+    widget_label: Mapped[str] = mapped_column(String(40), default="Start your call", server_default="Start your call")
+    widget_color: Mapped[str] = mapped_column(String(7), default="#4b46d6", server_default="#4b46d6")
+    widget_position: Mapped[str] = mapped_column(String(5), default="right", server_default="right")  # right | left
+    logo_url: Mapped[str | None] = mapped_column(String(500))
     # Visitors can call through the public link and the website widget.
     public_calls_enabled: Mapped[bool] = mapped_column(Boolean, default=True, server_default=true())
     updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

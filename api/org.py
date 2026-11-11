@@ -45,6 +45,9 @@ class Profile(BaseModel):
     website: str | None = Field(default=None, max_length=300)
     faqs: list[Faq] = Field(default_factory=list, max_length=30)
     public_calls_enabled: bool = True
+    # What the receptionist speaks, and with which voice (samples: frontend public/voices/).
+    language: Literal["en", "ur", "hi"] = "en"
+    voice: Literal["kiara", "janvi", "nora", "devansh", "krishna", "daniel"] = "kiara"
     slug: str | None = None  # read-only: the business's public link is /b/<slug>
 
     @field_validator("timezone")
@@ -67,7 +70,7 @@ async def get_profile(member: CurrentMember) -> Profile:
         business_name=profile.business_name, greeting=profile.greeting, about=profile.about, timezone=org.timezone,
         location_type=profile.location_type, address=profile.address, city=profile.city, country=profile.country,
         contact_email=profile.contact_email, website=profile.website, faqs=[Faq(**f) for f in profile.faqs],
-        public_calls_enabled=profile.public_calls_enabled, slug=org.slug,
+        public_calls_enabled=profile.public_calls_enabled, language=profile.language, voice=profile.voice, slug=org.slug,
     )
 
 
@@ -77,7 +80,7 @@ async def put_profile(body: Profile, member: CurrentMember) -> Profile:
         profile = await db.get(AgentProfile, member.org_id)
         assert profile is not None
         for key in ("business_name", "greeting", "about", "location_type", "address", "city", "country",
-                    "contact_email", "website", "public_calls_enabled"):
+                    "contact_email", "website", "public_calls_enabled", "language", "voice"):
             setattr(profile, key, getattr(body, key))
         profile.faqs = [f.model_dump() for f in body.faqs]
     # organizations is shared (no RLS); only this member's own org row is touched.
