@@ -1,0 +1,14 @@
+# Secrets
+.env*
+!.env.example
+
+# Python
+.venv/
+__pycache__/
+*.py[cod]
+
+# Tooling
+.ruff_cache/
+.pytest_cache/
+*.log
+.DS_Store
