@@ -14,7 +14,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from api.auth import CurrentMember, PlatformAdmin
+from api.auth import PlatformAdmin
 from api.history import get_db, get_member_call
 from db import CallEvent, CallTurnMetric, Organization
 from pricing import active_model, free_tier, price
@@ -47,7 +47,7 @@ def _columns(model: Any, row: Any, skip: tuple[str, ...] = ()) -> dict[str, Any]
 
 
 @router.get("/calls/{call_id}/metrics")
-async def call_metrics(call_id: uuid.UUID, db: Db, member: CurrentMember) -> dict[str, Any]:
+async def call_metrics(call_id: uuid.UUID, db: Db, member: PlatformAdmin) -> dict[str, Any]:
     call = await get_member_call(db, call_id, member.org_id)
     turns = (await db.scalars(select(CallTurnMetric).where(CallTurnMetric.call_id == call_id).order_by(CallTurnMetric.turn_index))).all()
     events = (await db.scalars(select(CallEvent).where(CallEvent.call_id == call_id).order_by(CallEvent.timestamp))).all()
@@ -87,7 +87,7 @@ def _range(tz: ZoneInfo, from_: date | None, to: date | None) -> tuple[date, dat
 @router.get("/analytics")
 async def analytics(
     db: Db,
-    member: CurrentMember,
+    member: PlatformAdmin,
     from_: Annotated[date | None, Query(alias="from")] = None,
     to: Annotated[date | None, Query()] = None,
 ) -> dict[str, Any]:

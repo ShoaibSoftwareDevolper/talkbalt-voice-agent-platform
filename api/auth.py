@@ -66,6 +66,7 @@ class MeResponse(BaseModel):
     org_id: uuid.UUID
     org_name: str
     role: str
+    is_admin: bool = False  # Talkbalt operator: may see costs, tokens and latency
 
 
 @dataclass(frozen=True)
@@ -121,12 +122,17 @@ async def current_member(tb_session: Annotated[str | None, Cookie()] = None) -> 
 CurrentMember = Annotated[Member, Depends(current_member)]
 
 
-async def platform_admin(member: CurrentMember) -> Member:
-    """Talkbalt's own operators (PLATFORM_ADMIN_EMAILS, comma separated), for platform-wide views."""
+def is_platform_admin(email: str | None) -> bool:
+    """Talkbalt's own operators (PLATFORM_ADMIN_EMAILS, comma separated). Only they see costs,
+    tokens and latency; business owners see calls and bookings."""
     allowed = {e.strip().lower() for e in os.getenv("PLATFORM_ADMIN_EMAILS", "").split(",") if e.strip()}
+    return bool(email) and email.lower() in allowed
+
+
+async def platform_admin(member: CurrentMember) -> Member:
     async with session_scope() as db:
         email = await db.scalar(select(User.email).where(User.id == member.user_id))
-    if not email or email.lower() not in allowed:
+    if not is_platform_admin(email):
         raise HTTPException(status_code=403, detail="Only Talkbalt admins can see this")
     return member
 
@@ -181,6 +187,7 @@ async def login(body: LoginRequest, response: Response, request: Request) -> MeR
     return MeResponse(
         user_id=row.User.id, name=row.User.name, email=row.User.email,
         org_id=row.Organization.id, org_name=row.Organization.name, role=row.role,
+        is_admin=is_platform_admin(row.User.email),
     )
 
 
@@ -198,4 +205,5 @@ async def me(member: CurrentMember) -> MeResponse:
         user = await db.get(User, member.user_id)
         org = await db.get(Organization, member.org_id)
     assert user is not None and org is not None
-    return MeResponse(user_id=user.id, name=user.name, email=user.email, org_id=org.id, org_name=org.name, role=member.role)
+    return MeResponse(user_id=user.id, name=user.name, email=user.email, org_id=org.id, org_name=org.name, role=member.role,
+                      is_admin=is_platform_admin(user.email))

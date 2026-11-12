@@ -11,12 +11,12 @@ from zoneinfo import ZoneInfo
 from fastapi import APIRouter, HTTPException, Query
 from livekit import api as lk
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import delete, select
+from sqlalchemy import delete, func, select
 from sqlalchemy.exc import IntegrityError
 
 from api import cache
 from api.auth import CurrentMember
-from db import AgentProfile, Booking, BusinessHours, Customer, Organization, Service, session_scope
+from db import AgentProfile, Booking, BusinessHours, Call, Customer, Organization, Service, session_scope
 
 AGENT_NAME = "talkbalt-agent"
 TOKEN_TTL = timedelta(minutes=10)
@@ -218,8 +218,10 @@ async def list_bookings(
     member: CurrentMember,
     from_: Annotated[date | None, Query(alias="from")] = None,
     to: Annotated[date | None, Query()] = None,
+    upcoming: bool = False,
 ) -> list[BookingOut]:
-    """Bookings between two days (inclusive) in the business's time zone; default: today + 30 days."""
+    """Bookings between two days (inclusive) in the business's time zone; default: today + 30 days.
+    With `upcoming`, only bookings that have not started yet."""
     async with session_scope(member.org_id) as db:
         org = await db.get(Organization, member.org_id)
         assert org is not None
@@ -233,7 +235,7 @@ async def list_bookings(
         rows = await db.execute(
             select(Booking, Customer)
             .join(Customer, Customer.id == Booking.customer_id)
-            .where(Booking.starts_at >= start, Booking.starts_at < end)
+            .where(Booking.starts_at >= (max(start, datetime.now(tz)) if upcoming else start), Booking.starts_at < end)
             .order_by(Booking.starts_at)
         )
         return [
@@ -243,6 +245,74 @@ async def list_bookings(
             )
             for b, c in rows
         ]
+
+
+class DayStats(BaseModel):
+    date: date
+    calls: int
+    bookings: int
+
+
+class Stats(BaseModel):
+    days: int
+    calls: int
+    bookings_confirmed: int
+    bookings_cancelled: int
+    upcoming: int
+    # The same numbers for the `days` before this period, so the dashboard can show the change.
+    prev_calls: int
+    prev_bookings_confirmed: int
+    daily: list[DayStats]  # one entry per day in the period, oldest first, zeros included
+
+
+@router.get("/stats")
+async def stats(member: CurrentMember, days: Annotated[int, Query(ge=1, le=366)] = 30) -> Stats:
+    """What a business owner cares about: calls answered and bookings made in the last `days` days,
+    the period before for comparison, and a day by day series for the chart.
+    (Costs, tokens and latency are for Talkbalt admins only.)"""
+    async with session_scope(member.org_id) as db:
+        org = await db.get(Organization, member.org_id)
+        assert org is not None
+        tz = ZoneInfo(org.timezone)
+        now = datetime.now(tz)
+        first_day = now.date() - timedelta(days=days - 1)
+        since = datetime.combine(first_day, time.min, tz)
+        before = datetime.combine(first_day - timedelta(days=days), time.min, tz)
+        mine = Call.org_id == member.org_id
+
+        async def count_calls(start: datetime, end: datetime | None = None) -> int:
+            q = select(func.count()).select_from(Call).where(mine, Call.started_at >= start)
+            return await db.scalar(q.where(Call.started_at < end) if end else q) or 0
+
+        async def count_bookings(status: str, start: datetime, end: datetime | None = None) -> int:
+            q = select(func.count()).select_from(Booking).where(Booking.created_at >= start, Booking.status == status)
+            return await db.scalar(q.where(Booking.created_at < end) if end else q) or 0
+
+        calls, prev_calls = await count_calls(since), await count_calls(before, since)
+        confirmed, prev_confirmed = await count_bookings("confirmed", since), await count_bookings("confirmed", before, since)
+        cancelled = await count_bookings("cancelled", since)
+        upcoming = await db.scalar(
+            select(func.count()).select_from(Booking).where(Booking.status == "confirmed", Booking.starts_at >= now)
+        ) or 0
+
+        # Per day in the business's own time zone.
+        call_day = func.date(func.timezone(org.timezone, Call.started_at))
+        booking_day = func.date(func.timezone(org.timezone, Booking.created_at))
+        calls_by_day = dict((await db.execute(
+            select(call_day, func.count()).where(mine, Call.started_at >= since).group_by(call_day)
+        )).all())
+        bookings_by_day = dict((await db.execute(
+            select(booking_day, func.count()).where(Booking.created_at >= since, Booking.status == "confirmed").group_by(booking_day)
+        )).all())
+
+    daily = [
+        DayStats(date=d, calls=calls_by_day.get(d, 0), bookings=bookings_by_day.get(d, 0))
+        for d in (first_day + timedelta(days=n) for n in range(days))
+    ]
+    return Stats(
+        days=days, calls=calls, bookings_confirmed=confirmed, bookings_cancelled=cancelled, upcoming=upcoming,
+        prev_calls=prev_calls, prev_bookings_confirmed=prev_confirmed, daily=daily,
+    )
 
 
 @router.post("/bookings/{booking_id}/cancel")
